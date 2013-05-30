@@ -1,0 +1,84 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*- 
+import os.path, time
+import fnmatch
+import re, os
+from sys import argv,stderr
+from subprocess import call
+from collections import defaultdict 
+import argparse
+
+"""
+CONFIG:
+
+Edit these to provide default functionality to autoscp
+"""
+REMOTE_HOST_DEFAULT  = 'user@xxx.xxx.xxx.xxx'
+REMOTE_ROOT_DEFAULT  = '/path/to/remote/dir'
+ABSOULTE_PEM_DEFAULT = '/path/to/your/local/pemfile'
+
+includes = ['*'] # Edit this to include files: Note: for files only
+excludes = ['*/.git', '*.pyc'] # Exclude List for dirs and files
+"""
+/CONFIG
+"""
+
+
+parser = argparse.ArgumentParser(description='Automatic Remtoe SCP On Local File Change')
+parser.add_argument('folders', nargs='+',help='The folders to upload to remote host')
+parser.add_argument('-c', '--create', action='store_const',const="c", dest='create',help='Upload Everything On Start And Create Directories')
+parser.add_argument('--host', dest='host', help='The remote host to SCP to', default=REMOTE_HOST_DEFAULT)
+parser.add_argument('--root', dest='root', help='The remote root directory to SCP to', default=REMOTE_ROOT_DEFAULT)
+parser.add_argument('--identity-file', dest='i', help='The absolute path to your pem key', default=ABSOULTE_PEM_DEFAULT)
+args = parser.parse_args()
+remotehost = args.host
+remoteroot = args.root
+mypem = args.i
+flags = [args.create]
+
+# transform glob patterns to regular expressions
+includes = r'|'.join([fnmatch.translate(x) for x in includes])
+excludes = r'|'.join([fnmatch.translate(x) for x in excludes]) or r'$.'
+
+last_written = defaultdict( lambda: None )
+
+created_dirs = defaultdict( lambda: set() )
+
+while True:
+    for folder_name in args.folders:
+        for root, dirs, files in os.walk(folder_name):
+            dirs[:] = [os.path.join(root, d) for d in dirs]
+            dirs[:] = [d for d in dirs if not re.match(excludes, d)]
+
+            # exclude/include files
+            files = [os.path.join(root, f) for f in files]
+            files = [f for f in files if not re.match(excludes, f)]
+            files = [f for f in files if re.match(includes, f)]
+
+            for fname in files:
+                tmcheckwrite = os.path.getmtime(fname)
+                if not last_written.get(fname):
+                    if 'c' in flags:
+                        partial_name = fname.replace(folder_name, "")
+                        joined_name = "/".join(partial_name.split("/")[:-1])
+                        if not joined_name in created_dirs[folder_name]:
+                            mkdir_cmd = ['ssh', '-i', '%s' % mypem, remotehost, 'mkdir', '-p', '%s/%s' % (remoteroot, joined_name)]
+                            call( mkdir_cmd )
+                            created_dirs[folder_name].add(joined_name)
+                        time.sleep(0.2) # <--- To give time for the command to execute properly before the scp command is called (had issues here before)
+                        print "\nFile:%s\nUploading to %s" % (fname, remoteroot)
+                        cmdp = ['scp','-i%s' % (mypem), fname, '%s:%s/%s' % (remotehost, remoteroot,partial_name)]
+                        call( cmdp )
+                    last_written[fname] = tmcheckwrite
+                elif last_written.get(fname) != tmcheckwrite:
+                    print "\nFile:%s\nlast modified: %s. Uploading to %s" % (fname, time.ctime(tmcheckwrite),remoteroot)
+                    last_written.update({fname: tmcheckwrite})
+                    partial_name = fname.replace(folder_name, "")
+                    if partial_name[0] == "/":
+                        partial_name = partial_name[1:]
+                    cmdp = ['scp','-i%s' % (mypem), fname, '%s:%s/%s' % (remotehost, remoteroot,partial_name)]
+                    call( cmdp )
+    time.sleep(0.5)
+
+
+
