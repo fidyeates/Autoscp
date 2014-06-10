@@ -55,7 +55,7 @@ if "$DIFF" == "yes":
         print "\nFile:%s\nUploading to $TARGET:$REMOTE" % (fname)
         uploadFile(fname)
 
-initial = "$INITIAL"
+initial = "$INITIAL" or "no"
 
 while True:
     for root, dirs, files in os.walk("$ORIGIN"):
@@ -70,9 +70,9 @@ while True:
         for fname in files:
             tmcheckwrite = os.lstat(fname).st_mtime
             if last_written.get(fname) != tmcheckwrite:
-                last_written.update({fname: tmcheckwrite})
-                if initial == "no":
+                if initial == "no" and last_written.get(fname) is None:
                     continue
+                last_written.update({fname: tmcheckwrite})    
                 partial_name = fname.replace("$ORIGIN", "")
                 if partial_name[0] == "/":
                     partial_name = partial_name[1:]
