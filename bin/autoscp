@@ -69,10 +69,11 @@ while True:
 
         for fname in files:
             tmcheckwrite = os.lstat(fname).st_mtime
-            if last_written.get(fname) != tmcheckwrite:
-                if initial == "no" and last_written.get(fname) is None:
-                    last_written.update({fname: tmcheckwrite})  
-                    continue
+            lastMod = last_written.get(fname)
+            if lastMod != tmcheckwrite:
+                last_written.update({fname: tmcheckwrite})   
+                if initial == "no" and lastMod is None:
+                    continue                
                 partial_name = fname.replace("$ORIGIN", "")
                 if partial_name[0] == "/":
                     partial_name = partial_name[1:]
