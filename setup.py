@@ -3,7 +3,7 @@ setup(
     name="autoscp",
     version="0.1",
     packages=find_packages(),
-    scripts=["bin/*"],
+    scripts=["bin/autoscp"],
 
     install_requires=[],
     package_data={},
